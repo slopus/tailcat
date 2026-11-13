@@ -355,6 +355,7 @@ type locoBackend struct {
 
 	mu             sync.Mutex
 	clients        map[key.NodePublic]*tailcfg.Node // for the server
+	askedToMeow    map[key.NodePublic]time.Time     // for the server: when each unknown client was last told to meow again
 	nm             *netmap.NetworkMap
 	allowedClients map[key.NodePublic]bool // or nil map for all
 	eps            []netip.AddrPort        // our current local UDP endpoints, sorted
@@ -644,6 +645,12 @@ func (s *Server) startLocked(ctx context.Context) error {
 	lb.isServer = true
 	lb.onDERPRecv = func(regionID tailcfg.DERPRegionID, src key.NodePublic, pkt []byte) bool {
 		if !IsMeowPacket(pkt) {
+			// A client still sending on a session this process never
+			// had (it restarted) would otherwise wait for its own
+			// timeouts to notice. Tell it to meow again.
+			if lb.shouldAskToMeow(src) {
+				lb.sys.MagicSock.Get().SendDERPPacketTo(src, regionID, EncodeMeowAgain())
+			}
 			return false
 		}
 		if IsMeowedPacket(pkt) {
@@ -1661,6 +1668,34 @@ func (lb *locoBackend) Start() error {
 	lb.sys.NetMon.Get().Start()
 
 	return nil
+}
+
+// meowAgainInterval is how often one client may be told to meow again.
+const meowAgainInterval = time.Second
+
+// shouldAskToMeow reports whether src, which sent the server something
+// other than a meow over DERP, is a client the server would admit but
+// holds no session for, and hasn't been told so in the last
+// meowAgainInterval. DERP authenticates src, so the reply can't be
+// aimed at anyone else.
+func (b *locoBackend) shouldAskToMeow(src key.NodePublic) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := b.clients[src]; ok {
+		return false
+	}
+	if b.allowedClients != nil && !b.allowedClients[src] {
+		return false
+	}
+	now := time.Now()
+	if last, ok := b.askedToMeow[src]; ok && now.Sub(last) < meowAgainInterval {
+		return false
+	}
+	if len(b.askedToMeow) >= 1024 {
+		clear(b.askedToMeow)
+	}
+	mak.Set(&b.askedToMeow, src, now)
+	return true
 }
 
 // onMeow handles a MeowPing from the client with node key src and

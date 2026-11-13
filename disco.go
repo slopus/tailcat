@@ -18,8 +18,9 @@ import (
 var meowMagic = [4]byte{'m', 'e', 'o', 'w'}
 
 const (
-	meowTypePing = 0x01 // client → server
-	meowTypePong = 0x02 // server → client ("meowed")
+	meowTypePing  = 0x01 // client → server
+	meowTypePong  = 0x02 // server → client ("meowed")
+	meowTypeAgain = 0x03 // server → client: no session here, meow again
 )
 
 // IsMeowPacket reports whether pkt starts with the meow magic prefix.
@@ -67,4 +68,19 @@ func ParseMeowPing(pkt []byte) (nodeKey key.NodePublic, discoKey key.DiscoPublic
 // IsMeowedPacket reports whether pkt is a meowed (acknowledgment) packet.
 func IsMeowedPacket(pkt []byte) bool {
 	return len(pkt) >= 5 && [4]byte(pkt[:4]) == meowMagic && pkt[4] == meowTypePong
+}
+
+// EncodeMeowAgain encodes a packet telling a client that the server
+// holds no session for it, as after the server restarted, so the client
+// should meow and handshake again at once.
+func EncodeMeowAgain() []byte {
+	b := make([]byte, 0, 4+1)
+	b = append(b, meowMagic[:]...)
+	b = append(b, meowTypeAgain)
+	return b
+}
+
+// IsMeowAgainPacket reports whether pkt is a meow-again packet.
+func IsMeowAgainPacket(pkt []byte) bool {
+	return len(pkt) >= 5 && [4]byte(pkt[:4]) == meowMagic && pkt[4] == meowTypeAgain
 }
