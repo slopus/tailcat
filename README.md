@@ -22,6 +22,8 @@
 >    `gvisor.dev/gvisor` with
 >    [slopus/gvisor 81dfea2b6](https://github.com/slopus/gvisor/commit/81dfea2b6e59310e06b52216bfbdeae1affc7c5b)
 >    ("tcp: don't let RACK start a fast recovery during timeout recovery")
+> 4. [593688625](https://github.com/slopus/tailcat/commit/593688625db6efd03e9602816029a50b92a54f2d)
+>    tailcat: tell a client the server has no session for to meow again
 >
 > Releases are tagged `v0.7.0-happy.N`. The license is unchanged (see
 > [LICENSE](LICENSE)).
