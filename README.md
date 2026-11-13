@@ -6,6 +6,26 @@
 
 # Tailcat
 
+> **Happy fork.** This is Happy's fork of
+> [tailscale/tailcat](https://github.com/tailscale/tailcat), used to build the
+> `tailcat` executable that Happy Agent embeds. It is not an official Tailscale
+> release. The `happy/v0.7.0` branch is upstream `v0.7.0`
+> ([15ab9e68b](https://github.com/tailscale/tailcat/commit/15ab9e68bfc6534a61797d7af28cedd42b54a3a5))
+> plus these patches:
+>
+> 1. [612a1d156](https://github.com/slopus/tailcat/commit/612a1d156ccc34fa4f932375bc22a748580b0bd5)
+>    tailcat: don't crash the server when a client resets before it's served
+> 2. [4e70535e4](https://github.com/slopus/tailcat/commit/4e70535e4f5e6d757dd6900c9f84f1a2a78f2bbc)
+>    tailcat: test that SACK recovers from a blackout
+> 3. [0cdfe71ce](https://github.com/slopus/tailcat/commit/0cdfe71cee5e63e0d053cd5c0189be8683c77c96)
+>    go.mod: use gVisor with the timeout-recovery fix, which replaces
+>    `gvisor.dev/gvisor` with
+>    [slopus/gvisor 81dfea2b6](https://github.com/slopus/gvisor/commit/81dfea2b6e59310e06b52216bfbdeae1affc7c5b)
+>    ("tcp: don't let RACK start a fast recovery during timeout recovery")
+>
+> Releases are tagged `v0.7.0-happy.N`. The license is unchanged (see
+> [LICENSE](LICENSE)).
+
 Tailcat is a remix of Tailscale open source pieces to act like
 [netcat](https://en.wikipedia.org/wiki/Netcat), but over Tailscale's data plane,
 without Tailscale's control plane. Tailscale's data plane (`magicsock`,
