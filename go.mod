@@ -109,3 +109,5 @@ require (
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	honnef.co/go/tools v0.8.0-rc.1 // indirect
 )
+
+replace gvisor.dev/gvisor => github.com/slopus/gvisor v0.0.0-20261113104054-81dfea2b6e59
