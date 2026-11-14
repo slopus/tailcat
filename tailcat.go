@@ -353,9 +353,13 @@ type locoBackend struct {
 	// peer map lookup. Set before createEngine.
 	onDERPRecv func(regionID tailcfg.DERPRegionID, src key.NodePublic, pkt []byte) bool
 
+	// testHookBeforeAdmit, if non-nil, runs before a meow is handled.
+	testHookBeforeAdmit func()
+
 	mu             sync.Mutex
 	clients        map[key.NodePublic]*tailcfg.Node // for the server
 	askedToMeow    map[key.NodePublic]time.Time     // for the server: when each unknown client was last told to meow again
+	admitting      map[key.NodePublic]int           // for the server: meows from each client still being handled
 	nm             *netmap.NetworkMap
 	allowedClients map[key.NodePublic]bool // or nil map for all
 	eps            []netip.AddrPort        // our current local UDP endpoints, sorted
@@ -451,6 +455,8 @@ type Server struct {
 	AllowedClients []key.NodePublic
 
 	lb *locoBackend // non-nil once Start has been called
+
+	testHookBeforeAdmit func() // see locoBackend.testHookBeforeAdmit
 
 	// startMu serializes Start and the implicit start in Listen.
 	startMu sync.Mutex
@@ -616,6 +622,7 @@ func (s *Server) startLocked(ctx context.Context) error {
 
 	lb := newLocoBackend(priv, psk)
 	lb.logf = logf
+	lb.testHookBeforeAdmit = s.testHookBeforeAdmit
 	lb.dm = &tailcfg.DERPMap{}
 	mak.Set(&lb.dm.Regions, reg.RegionID, reg)
 	for _, k := range s.AllowedClients {
@@ -658,7 +665,15 @@ func (s *Server) startLocked(ctx context.Context) error {
 		}
 		if _, discoPub, ok := ParseMeowPing(pkt); ok {
 			mc := lb.sys.MagicSock.Get()
+			// Marked before onMeow runs, so that what follows the meow,
+			// as a rejoining client's initiation does, isn't answered
+			// with meow again while the client is being added.
+			lb.noteAdmitting(src, 1)
 			go func() {
+				defer lb.noteAdmitting(src, -1)
+				if h := lb.testHookBeforeAdmit; h != nil {
+					h()
+				}
 				// Only reply once the client is fully added as a peer:
 				// "meowed" is the ack that tells the client it can
 				// start dialing. Disallowed clients get no reply.
@@ -1681,7 +1696,7 @@ const meowAgainInterval = time.Second
 func (b *locoBackend) shouldAskToMeow(src key.NodePublic) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, ok := b.clients[src]; ok {
+	if _, ok := b.clients[src]; ok || b.admitting[src] > 0 {
 		return false
 	}
 	if b.allowedClients != nil && !b.allowedClients[src] {
@@ -1696,6 +1711,18 @@ func (b *locoBackend) shouldAskToMeow(src key.NodePublic) bool {
 	}
 	mak.Set(&b.askedToMeow, src, now)
 	return true
+}
+
+// noteAdmitting counts a meow from src that is being handled (delta 1)
+// or has been (delta -1).
+func (b *locoBackend) noteAdmitting(src key.NodePublic, delta int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if n := b.admitting[src] + delta; n > 0 {
+		mak.Set(&b.admitting, src, n)
+	} else {
+		delete(b.admitting, src)
+	}
 }
 
 // onMeow handles a MeowPing from the client with node key src and

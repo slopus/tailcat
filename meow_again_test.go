@@ -62,6 +62,17 @@ func (p *derpPeer) next(src key.NodePublic, d time.Duration) []byte {
 	}
 }
 
+// nextMeow returns the next meow packet from src within d, or nil,
+// skipping the disco and WireGuard packets an admitted client also gets.
+func (p *derpPeer) nextMeow(src key.NodePublic, d time.Duration) []byte {
+	for deadline := time.Now().Add(d); time.Now().Before(deadline); {
+		if pkt := p.next(src, time.Until(deadline)); IsMeowPacket(pkt) {
+			return pkt
+		}
+	}
+	return nil
+}
+
 func TestServerAsksAClientItHasNoSessionForToMeowAgain(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +80,8 @@ func TestServerAsksAClientItHasNoSessionForToMeowAgain(t *testing.T) {
 	reg := dm.Regions[1]
 	serverKey := key.NewNode()
 	s := &Server{Key: serverKey, Logf: mkLogger(t, "server"), Region: reg}
+	// Admission slower than the packet after the meow, as under load.
+	s.testHookBeforeAdmit = func() { time.Sleep(100 * time.Millisecond) }
 	t.Cleanup(func() { s.Close() })
 	if err := s.Start(); err != nil {
 		t.Fatalf("server Start: %v", err)
@@ -100,12 +113,25 @@ func TestServerAsksAClientItHasNoSessionForToMeowAgain(t *testing.T) {
 	priv := key.NewNode()
 	admitted := newDERPPeer(t, reg, priv)
 	admitted.c.Send(server, EncodeMeowPing(priv.Public(), key.NewDisco().Public()))
-	if got := admitted.next(server, 5*time.Second); !IsMeowedPacket(got) {
+	if got := admitted.nextMeow(server, 5*time.Second); !IsMeowedPacket(got) {
 		t.Fatalf("reply to meow = %x; want meowed", got)
 	}
 	admitted.c.Send(server, wireGuardData)
-	if got := admitted.next(server, 500*time.Millisecond); IsMeowAgainPacket(got) {
+	if got := admitted.nextMeow(server, 500*time.Millisecond); IsMeowAgainPacket(got) {
 		t.Errorf("an admitted client was told to meow again")
+	}
+
+	// Nor is one whose next packet comes before its admission is done, as
+	// a rejoining client's initiation follows its meow.
+	priv = key.NewNode()
+	rejoining := newDERPPeer(t, reg, priv)
+	rejoining.c.Send(server, EncodeMeowPing(priv.Public(), key.NewDisco().Public()))
+	rejoining.c.Send(server, wireGuardData)
+	if got := rejoining.nextMeow(server, 5*time.Second); !IsMeowedPacket(got) {
+		t.Fatalf("reply to meow = %x; want meowed", got)
+	}
+	if got := rejoining.nextMeow(server, 500*time.Millisecond); IsMeowAgainPacket(got) {
+		t.Errorf("a client being admitted was told to meow again")
 	}
 
 	// Nor is a client the server wouldn't admit.
