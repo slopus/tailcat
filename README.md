@@ -24,6 +24,8 @@
 >    ("tcp: don't let RACK start a fast recovery during timeout recovery")
 > 4. [593688625](https://github.com/slopus/tailcat/commit/593688625db6efd03e9602816029a50b92a54f2d)
 >    tailcat: tell a client the server has no session for to meow again
+> 5. [44b84627c](https://github.com/slopus/tailcat/commit/44b84627ca418b89eac4cbdccbbdfdb4132137e9)
+>    tailcat: don't tell a client being admitted to meow again
 >
 > Releases are tagged `v0.7.0-happy.N`. The license is unchanged (see
 > [LICENSE](LICENSE)).
